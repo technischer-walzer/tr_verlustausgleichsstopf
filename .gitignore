@@ -1,0 +1,23 @@
+# local credentials / cookies
+.pytr/
+*.pem
+*.txt
+
+# exports and large data
+all_events.json
+account_transactions.csv
+output.csv
+verlusttopf_*_sales.csv
+timeline/
+*.pdf
+*.csv
+*.json
+
+# env / cache
+__pycache__/
+*.pyc
+.DS_Store
+.uv/
+.venv/
+.env
+.cache/
