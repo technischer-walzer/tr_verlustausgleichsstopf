@@ -89,3 +89,68 @@ def test_warning_on_inventory_shortage():
     realized, per_sale, warnings = cv.fifo_realized([buy, sell], year=2025)
     assert warnings  # should warn about missing inventory
     assert len(per_sale) == 1
+
+
+def test_fifo_multiple_lots():
+    """Test that FIFO correctly pulls from multiple lots in order."""
+    trades = [
+        parse(make_event("buy", isin="US0000000004", shares=10, price=100, fee=0, dt="2025-01-01T00:00:00.000+0000")),
+        parse(make_event("buy", isin="US0000000004", shares=5, price=120, fee=0, dt="2025-02-01T00:00:00.000+0000")),
+        parse(make_event("sell", isin="US0000000004", shares=12, price=150, fee=0, dt="2025-03-01T00:00:00.000+0000")),
+    ]
+    realized, per_sale, warnings = cv.fifo_realized(trades, year=2025)
+    assert not warnings
+    # Should take 10 @ 100 = 1000, then 2 @ 120 = 240 → total cost 1240
+    # Proceeds: 12 @ 150 = 1800
+    # Profit: 1800 - 1240 = 560
+    assert abs(realized["stock"] - 560.0) < 1e-6
+    assert len(per_sale) == 1
+    assert abs(per_sale[0]["cost_basis"] - 1240.0) < 1e-6
+
+
+def test_fifo_realized_loss():
+    """Test that losses are correctly calculated as negative profits."""
+    trades = [
+        parse(make_event("buy", isin="US0000000005", shares=10, price=100, fee=0)),
+        parse(make_event("sell", isin="US0000000005", shares=10, price=80, fee=0, dt="2025-03-01T00:00:00.000+0000")),
+    ]
+    realized, per_sale, warnings = cv.fifo_realized(trades, year=2025)
+    assert not warnings
+    # cost basis 10*100=1000, proceeds 10*80=800 → loss -200
+    assert abs(realized["stock"] - (-200.0)) < 1e-6
+    assert len(per_sale) == 1
+    assert per_sale[0]["profit"] < 0
+
+
+def test_year_filtering():
+    """Test that only sales in the target year are counted."""
+    trades = [
+        parse(make_event("buy", isin="US0000000006", shares=10, price=100, fee=0, dt="2024-01-01T00:00:00.000+0000")),
+        parse(make_event("sell", isin="US0000000006", shares=5, price=160, fee=0, dt="2024-12-01T00:00:00.000+0000")),
+        parse(make_event("sell", isin="US0000000006", shares=3, price=150, fee=0, dt="2025-03-01T00:00:00.000+0000")),
+    ]
+    # Calculate for 2025 only
+    realized, per_sale, warnings = cv.fifo_realized(trades, year=2025)
+    assert not warnings
+    # 2024 sale consumed 5 shares from inventory (not counted in 2025 profit)
+    # 2025 sale: 3 @ 150 = 450, cost basis 3 @ 100 = 300 → profit 150
+    assert abs(realized["stock"] - 150.0) < 1e-6
+    assert len(per_sale) == 1  # only 2025 sale
+
+
+def test_partial_lot_consumption():
+    """Test that a lot is partially consumed and remainder is used later."""
+    trades = [
+        parse(make_event("buy", isin="US0000000007", shares=10, price=100, fee=0, dt="2025-01-01T00:00:00.000+0000")),
+        parse(make_event("sell", isin="US0000000007", shares=3, price=150, fee=0, dt="2025-02-01T00:00:00.000+0000")),
+        parse(make_event("sell", isin="US0000000007", shares=5, price=140, fee=0, dt="2025-03-01T00:00:00.000+0000")),
+    ]
+    realized, per_sale, warnings = cv.fifo_realized(trades, year=2025)
+    assert not warnings
+    # First sale: 3 @ 150 - 3 @ 100 = 450 - 300 = 150
+    # Second sale: 5 @ 140 - 5 @ 100 = 700 - 500 = 200
+    # Total profit: 350
+    assert abs(realized["stock"] - 350.0) < 1e-6
+    assert len(per_sale) == 2
+    assert abs(per_sale[0]["profit"] - 150.0) < 1e-6
+    assert abs(per_sale[1]["profit"] - 200.0) < 1e-6
