@@ -154,3 +154,51 @@ def test_partial_lot_consumption():
     assert len(per_sale) == 2
     assert abs(per_sale[0]["profit"] - 150.0) < 1e-6
     assert abs(per_sale[1]["profit"] - 200.0) < 1e-6
+
+
+def test_fees_in_cost_basis():
+    """Test that fees are included in cost basis for buys and reduce proceeds for sells."""
+    trades = [
+        parse(make_event("buy", isin="US0000000008", shares=10, price=100, fee=5, dt="2025-01-01T00:00:00.000+0000")),
+        parse(make_event("sell", isin="US0000000008", shares=10, price=150, fee=3, dt="2025-02-01T00:00:00.000+0000")),
+    ]
+    realized, per_sale, warnings = cv.fifo_realized(trades, year=2025)
+    assert not warnings
+    # Buy cost: 10*100 + 5 = 1005
+    # Sell proceeds: 10*150 + 3 = 1503 (fee adds to total in make_event)
+    # Profit: 1503 - 1005 = 498
+    assert abs(realized["stock"] - 498.0) < 1e-6
+    assert len(per_sale) == 1
+
+
+def test_multiple_isins_separate_fifo():
+    """Test that FIFO is tracked separately for each ISIN."""
+    trades = [
+        parse(make_event("buy", isin="US0000000009", shares=10, price=100, fee=0, dt="2025-01-01T00:00:00.000+0000")),
+        parse(make_event("buy", isin="US0000000010", shares=10, price=50, fee=0, dt="2025-01-02T00:00:00.000+0000")),
+        parse(make_event("sell", isin="US0000000009", shares=5, price=150, fee=0, dt="2025-02-01T00:00:00.000+0000")),
+        parse(make_event("sell", isin="US0000000010", shares=5, price=80, fee=0, dt="2025-02-02T00:00:00.000+0000")),
+    ]
+    realized, per_sale, warnings = cv.fifo_realized(trades, year=2025)
+    assert not warnings
+    # ISIN 009: 5 @ 150 - 5 @ 100 = 750 - 500 = 250
+    # ISIN 010: 5 @ 80 - 5 @ 50 = 400 - 250 = 150
+    # Total profit: 400
+    assert abs(realized["stock"] - 400.0) < 1e-6
+    assert len(per_sale) == 2
+
+
+def test_fractional_shares():
+    """Test that fractional shares are handled correctly (common with TR savings plans)."""
+    trades = [
+        parse(make_event("buy", isin="US0000000011", shares=10.5, price=100, fee=0, dt="2025-01-01T00:00:00.000+0000")),
+        parse(make_event("sell", isin="US0000000011", shares=3.7, price=150, fee=0, dt="2025-02-01T00:00:00.000+0000")),
+    ]
+    realized, per_sale, warnings = cv.fifo_realized(trades, year=2025)
+    assert not warnings
+    # Cost basis: 3.7 * 100 = 370
+    # Proceeds: 3.7 * 150 = 555
+    # Profit: 555 - 370 = 185
+    assert abs(realized["stock"] - 185.0) < 1e-6
+    assert len(per_sale) == 1
+    assert abs(per_sale[0]["cost_basis"] - 370.0) < 1e-6
