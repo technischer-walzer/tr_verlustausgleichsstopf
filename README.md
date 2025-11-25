@@ -49,3 +49,11 @@ Ausgabe auf der Konsole und CSV `verlusttopf_2025_sales.csv`.
 
 ## Lizenz
 MIT (wie das pytr-Projekt, auf dem der Export basiert).
+
+## Tests
+- Erfordern nur `pytest` (kein Netz). Beispiel:
+```bash
+pip install pytest  # oder uv add pytest
+pytest -q
+```
+Tests prüfen das Parsing der Event-Struktur, FIFO-Berechnung für Aktien/Derivate getrennt sowie Warnungen bei fehlendem Bestand.
