@@ -1,11 +1,11 @@
-# TR Verlusttopf Rechner (FIFO)
+# TR KESt-Rechner (gleitender Durchschnitt, Österreich)
 
-Kleines Script, das aus dem Trade-Republic-Timeline-Export (`all_events.json`) die realisierten Gewinne/Verluste je deutscher Verlusttopf (Aktien vs. Sonstige) berechnet.
+Kleines Script, das aus dem Trade-Republic-Timeline-Export (`all_events.json`) die realisierten Gewinne/Verluste nach österreichischer Logik (gleitender Durchschnittspreis, ein gemeinsamer Topf) berechnet.
 
 ## Was es tut
 - Liest ausgeführte Käufe/Verkäufe aus `all_events.json` (von `pytr dl_docs`).
-- FIFO-Kostenbasis pro ISIN, trennt in `stock` (Aktien/ETF) und `other` (Derivate/ETC/Optionsscheine etc.).
-- Schreibt Detail-CSV `verlusttopf_<year>_sales.csv` mit Erlös, Kostenbasis, PnL, Topf.
+- Durchschnittskosten pro ISIN (gleitender Durchschnitt), ein gemeinsamer Topf für alle Wertpapiere.
+- Schreibt Detail-CSV `verlusttopf_<year>_sales.csv` mit Erlös, Kostenbasis, PnL.
 - CLI-Option `--year` (Standard: aktuelles Jahr).
 
 ## Voraussetzungen
@@ -29,18 +29,19 @@ Ergebnis im Ordner `tr_export/`: u.a. `all_events.json`, `account_transactions.c
 ## 3) Verlusttopf berechnen
 ```bash
 cd tr_export
-python compute_verlusttopf.py --events all_events.json --year 2025
+python compute_avg_cost.py --events all_events.json --year 2025
 ```
 Ausgabe auf der Konsole und CSV `verlusttopf_2025_sales.csv`.
 
 ## Hinweise / Grenzen
 - Nur ausgeführte Orders; stornierte/abgebrochene werden ignoriert.
 - Wenn frühere Käufe fehlen, wird der Kostensatz zu niedrig → Warnung im Output.
-- Keine steuerliche Beratung, keine Teilfreistellungen/Quellensteuer; reiner FIFO.
-- Kategorien: alles ohne expliziten `instrumentType` wird als `stock` gedeutet; TR liefert für Derivate meist `derivative` → wandert in `other`.
+- Keine steuerliche Beratung, keine Teilfreistellungen/Quellensteuer; rein gleitender Durchschnitt.
+- Instrument-Typ wird aktuell nicht für verschiedene Töpfe verwendet; alle Wertpapiere fließen in denselben Pool (27,5 % KESt).
+- Spesen/Gebühren werden für die steuerliche Bemessungsgrundlage ignoriert (nicht abzugsfähig bei privaten Kapitaleinkünften in AT).
 
 ## Dateien im Repo
-- `compute_verlusttopf.py` – das Script
+- `compute_avg_cost.py` – das Script
 - `.gitignore` – schließt sensible/irrelevante Dateien aus (.pytr, Exporte, Cache)
 
 ## Typische Fehler
@@ -56,4 +57,4 @@ MIT (wie das pytr-Projekt, auf dem der Export basiert).
 pip install pytest  # oder uv add pytest
 pytest -q
 ```
-Tests prüfen das Parsing der Event-Struktur, FIFO-Berechnung für Aktien/Derivate getrennt sowie Warnungen bei fehlendem Bestand.
+Tests prüfen das Parsing der Event-Struktur, die gleitende Durchschnittsberechnung sowie Warnungen (fehlender Bestand, Derivate im gemeinsamen Pool).
